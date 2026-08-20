@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "640075276096",
+    "project_id": "soberwatch",
+    "storage_bucket": "soberwatch.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:640075276096:android:d877043ee6775a7fede4a5",
+        "android_client_info": {
+          "package_name": "com.aistudio.soberwatch.exklmp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWS-6ejgE1_s-36L2gOhqGEBd9TmOmNE8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

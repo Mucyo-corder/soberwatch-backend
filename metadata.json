@@ -1,0 +1,6 @@
+{
+  "name": "SoberWatch Health",
+  "description": "A premium smart portable health monitoring device app for ESP32-S3 measuring alcohol level, heart rate, SpO2, temperature, and ECG with real-time BLE & Wi-Fi sensor data, AI insights, emergency alerts, and PDF health reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
