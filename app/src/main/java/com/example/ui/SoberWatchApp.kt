@@ -52,6 +52,7 @@ import com.example.ui.screens.reports.ReportsScreen
 import com.example.ui.screens.settings.SettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.SoberWatchViewModel
+import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
   object Splash : Screen("splash")
@@ -91,6 +92,7 @@ fun SoberWatchApp(
 ) {
   val appTheme by viewModel.appTheme.collectAsState()
   val context = LocalContext.current
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
   val darkTheme = when (appTheme) {
     AppTheme.LIGHT -> false
     AppTheme.DARK -> true
@@ -295,8 +297,14 @@ fun SoberWatchApp(
             onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
             onSimulateHighBac = { viewModel.simulateHighAlcoholAlert() },
             onSaveReport = { 
-                viewModel.generateNewReport()
-                android.widget.Toast.makeText(context, "Detection report saved to history", android.widget.Toast.LENGTH_SHORT).show()
+                scope.launch {
+                    try {
+                        viewModel.generateNewReport()
+                        android.widget.Toast.makeText(context, "Detection report saved to history", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(context, "Failed to save report", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
           )
         }

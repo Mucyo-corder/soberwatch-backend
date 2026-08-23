@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.example.models.HealthReport
 import com.example.models.SensorReading
 import com.example.services.PdfReportGenerator
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,11 +34,12 @@ fun ReportsScreen(
   reports: List<HealthReport>,
   recentReadings: List<SensorReading>,
   userName: String,
-  onGenerateNewReport: () -> HealthReport,
+  onGenerateNewReport: suspend () -> HealthReport,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   val scrollState = rememberScrollState()
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
 
   Column(
     modifier =
@@ -72,10 +74,16 @@ fun ReportsScreen(
 
       Button(
         onClick = {
-          val newRep = onGenerateNewReport()
-          val file = PdfReportGenerator.generateHealthReportPdf(context, newRep, recentReadings, userName)
-          Toast.makeText(context, "Report Generated", Toast.LENGTH_SHORT).show()
-          PdfReportGenerator.sharePdfReport(context, file)
+          scope.launch {
+              try {
+                  val newRep = onGenerateNewReport()
+                  val file = PdfReportGenerator.generateHealthReportPdf(context, newRep, recentReadings, userName)
+                  Toast.makeText(context, "Report Generated and Saved", Toast.LENGTH_SHORT).show()
+                  PdfReportGenerator.sharePdfReport(context, file)
+              } catch (e: Exception) {
+                  Toast.makeText(context, "Failed to generate report", Toast.LENGTH_SHORT).show()
+              }
+          }
         },
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(

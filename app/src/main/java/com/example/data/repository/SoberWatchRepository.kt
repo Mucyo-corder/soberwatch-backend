@@ -352,35 +352,45 @@ class SoberWatchRepository(private val context: Context) {
     } catch (_: Exception) {}
   }
 
-  fun generateNewReport(): HealthReport {
+  suspend fun generateNewReport(): HealthReport = kotlinx.coroutines.withContext(Dispatchers.IO) {
     val recent = _recentReadingsList.value
-    val highestBac = recent.maxOfOrNull { it.alcoholBac } ?: currentReading.value.alcoholBac
-    val avgBpm = if (recent.isNotEmpty()) recent.map { it.heartRateBpm }.average().toInt() else currentReading.value.heartRateBpm
-    val avgSpo2 = if (recent.isNotEmpty()) recent.map { it.spo2Percent }.average().toInt() else currentReading.value.spo2Percent
-    val avgTemp = if (recent.isNotEmpty()) recent.map { it.tempCelsius }.average() else currentReading.value.tempCelsius
+    val current = currentReading.value
+    
+    val highestBac = if (recent.isNotEmpty()) recent.maxOf { it.alcoholBac } else current.alcoholBac
+    val avgBpm = if (recent.isNotEmpty()) recent.map { it.heartRateBpm }.average().toInt() else current.heartRateBpm
+    val avgSpo2 = if (recent.isNotEmpty()) recent.map { it.spo2Percent }.average().toInt() else current.spo2Percent
+    val avgTemp = if (recent.isNotEmpty()) recent.map { it.tempCelsius }.average() else current.tempCelsius
 
+    val reportId = "rep_${System.currentTimeMillis()}"
+    val generatedAt = System.currentTimeMillis()
+    val dateLabel = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.US).format(java.util.Date(generatedAt))
+    
     val newReport = HealthReport(
-      reportId = "rep_${System.currentTimeMillis()}",
-      dateRangeLabel = "Current Session Summary",
-      generatedAt = System.currentTimeMillis(),
+      reportId = reportId,
+      dateRangeLabel = "Detection Report: $dateLabel",
+      generatedAt = generatedAt,
       highestBac = highestBac,
       averageHeartRate = avgBpm,
       averageSpO2 = avgSpo2,
       averageTemperature = avgTemp,
-      totalReadingsCount = (recent.size + 1500).coerceAtLeast(100),
+      totalReadingsCount = recent.size.coerceAtLeast(1),
       alertCount = _alertsHistory.value.size,
-      wellnessScore = currentReading.value.overallHealthScore
+      wellnessScore = current.overallHealthScore
     )
     
-    scope.launch {
+    try {
         reportDao.insertReport(HealthReportEntity(
             newReport.reportId, newReport.dateRangeLabel, newReport.generatedAt,
             newReport.highestBac, newReport.averageHeartRate, newReport.averageSpO2,
             newReport.averageTemperature, newReport.totalReadingsCount,
             newReport.alertCount, newReport.wellnessScore
         ))
+        android.util.Log.d("SoberWatch", "Report saved successfully: ${newReport.reportId}")
+    } catch (e: Exception) {
+        android.util.Log.e("SoberWatch", "Failed to save report", e)
     }
-    return newReport
+    
+    newReport
   }
 
   private fun seedInitialContacts() {

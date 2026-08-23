@@ -235,7 +235,7 @@ class SoberWatchViewModel(application: Application) : AndroidViewModel(applicati
     voiceService.shutdown()
   }
 
-  fun generateNewReport(): HealthReport {
+  suspend fun generateNewReport(): HealthReport {
     return repository.generateNewReport()
   }
 
