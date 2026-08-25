@@ -1,8 +1,10 @@
 const express = require("express");
 const admin = require("firebase-admin");
+const cors = require("cors"); // <-- Iki ni cyo cyongeweho kugira ngo App ibashe kuvugana na server!
 const app = express();
 
 app.use(express.json());
+app.use(cors()); // Ibi birema browser/App gukora requests!
 
 // ============================================================
 // FIREBASE INITIALIZATION
@@ -88,6 +90,8 @@ app.post("/uploadTelemetry", async (req, res) => {
     temp,
     ecgStatus,
     sensorRaw,
+    sensorResponse,
+    status,
     deviceId
   } = req.body;
 
@@ -121,6 +125,8 @@ app.post("/uploadTelemetry", async (req, res) => {
     tempCelsius: Number(temp) || 0,
     ecgStatus: ecgStatus || "Stable",
     sensorRaw: Number(sensorRaw) || 0,
+    sensorResponse: Number(sensorResponse) || 0,
+    status: status || "SAFE",
     deviceId: deviceId || "SOBERWATCH-V1",
     timestamp: Date.now(),
     source: "hardware"
@@ -129,7 +135,7 @@ app.post("/uploadTelemetry", async (req, res) => {
   // FIRESTORE
   try {
 
-    // YES! IKI NICYO CYAHINDUTSE: .document(uid) YAHINDUWE KOBA .doc(uid)
+    // IKI NICYO CYAHINDUTSE: .document(uid) YAHINDUWE KOBA .doc(uid)
     const userRef = db.collection("users").doc(uid);
 
     // Save reading to history
@@ -182,6 +188,8 @@ app.post("/testTelemetry", async (req, res) => {
     tempCelsius: 36.7,
     ecgStatus: "Stable",
     sensorRaw: 1200,
+    sensorResponse: 20.0,
+    status: "CAUTION",
     deviceId: "SOBERWATCH-TEST",
     timestamp: Date.now(),
     source: "test"
@@ -189,7 +197,7 @@ app.post("/testTelemetry", async (req, res) => {
 
   try {
 
-    // YES! IKI NACYO CYAHINDUTSE: .document(uid) YAHINDUWE KOBA .doc(uid)
+    // IKI NACYO CYAHINDUTSE: .document(uid) YAHINDUWE KOBA .doc(uid)
     const userRef = db.collection("users").doc(uid);
 
     const readingRef = await userRef.collection("readings").add(testData);
