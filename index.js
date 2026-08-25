@@ -1,13 +1,11 @@
 const express = require('express');
 const admin = require('firebase-admin');
+const cors = require('cors'); // <-- Iki ni cyo cyongeweho kugira ngo App ibashe kuvugana na server!
 const app = express();
-app.use(express.json());
 
-/**
- * FIREBASE INITIALIZATION
- * On Render, we store the service account JSON in an Environment Variable
- * named FIREBASE_SERVICE_ACCOUNT for security.
- */
+app.use(express.json());
+app.use(cors());
+
 try {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
@@ -20,57 +18,155 @@ try {
 
 const db = admin.firestore();
 
-/**
- * TELEMETRY API ENDPOINT
- * POST https://your-app.onrender.com/uploadTelemetry
- */
+// API KEY
+const DEVICE_API_KEY = "SOBER_WATCH_DEVICE_KEY_2026";
+
+app.get('/', (req, res) => {
+  res.status(200).json({
+    service: "SoberWatch Telemetry API",
+    status: "online",
+    firebase: db ? "connected" : "not_connected",
+    endpoint: "/uploadTelemetry",
+    version: "1.0.0"
+  });
+});
+
 app.post('/uploadTelemetry', async (req, res) => {
-  // 1. Security Check
   const apiKey = req.headers["x-api-key"];
-  if (!apiKey || apiKey !== "SOBER_WATCH_DEVICE_KEY_2026") {
-    return res.status(401).send("Unauthorized: Invalid Device Key");
+  if (!apiKey || apiKey !== DEVICE_API_KEY) {
+    return res.status(401).json({
+      status: "error",
+      message: "Unauthorized: Invalid Device Key"
+    });
   }
 
-  // 2. Validate Data
-  const { uid, bac, heartRate, spo2, temp, ecgStatus } = req.body;
-  if (!uid || bac === undefined || !heartRate) {
-    return res.status(400).send("Missing required telemetry fields (uid, bac, or heartRate)");
+  if (!db) {
+    return res.status(503).json({
+      status: "error",
+      message: "Firebase is not connected"
+    });
   }
+
+  const { uid, bac, heartRate, spo2, temp, ecgStatus, sensorRaw, sensorResponse, status, deviceId } = req.body;
+
+  if (!uid) {
+    return res.status(400).json({
+      status: "error",
+      message: "uid is required"
+    });
+  }
+
+  if (bac === undefined) {
+    return res.status(400).json({
+      status: "error",
+      message: "bac is required"
+    });
+  }
+
+  if (heartRate === undefined) {
+    return res.status(400).json({
+      status: "error",
+      message: "heartRate is required"
+    });
+  }
+
+  const telemetryData = {
+    alcoholBac: Number(bac) || 0,
+    heartRateBpm: Number(heartRate) || 0,
+    spo2Percent: Number(spo2) || 0,
+    tempCelsius: Number(temp) || 0,
+    ecgStatus: ecgStatus || "Stable",
+    sensorRaw: Number(sensorRaw) || 0,
+    sensorResponse: Number(sensorResponse) || 0,
+    status: status || "SAFE",
+    deviceId: deviceId || "SOBERWATCH-V1",
+    timestamp: Date.now(),
+    source: "hardware"
+  };
 
   try {
-    const timestamp = Date.now();
-    const telemetryData = {
-      alcoholBac: parseFloat(bac),
-      heartRateBpm: parseInt(heartRate),
-      spo2Percent: parseInt(spo2) || 0,
-      tempCelsius: parseFloat(temp) || 0,
-      ecgStatus: ecgStatus || "Stable",
-      timestamp: timestamp,
-      source: "hardware"
-    };
-
-    // 3. Save to user's database collection
-    await db.collection("users").document(uid).collection("readings").add(telemetryData);
-
-    // 4. Update the latest status in the user's profile
-    await db.collection("users").document(uid).update({
-      lastReading: telemetryData
-    });
+    // YAHINDUWE: .document() -> .doc()
+    const userRef = db.collection("users").doc(uid);
+    const readingRef = await userRef.collection("readings").add(telemetryData);
+    await userRef.set({
+      lastReading: telemetryData,
+      lastReadingId: readingRef.id,
+      updatedAt: Date.now()
+    }, { merge: true });
 
     return res.status(200).json({
-        status: "success",
-        received: timestamp
+      status: "success",
+      message: "Telemetry uploaded successfully",
+      readingId: readingRef.id,
+      received: telemetryData.timestamp
     });
   } catch (error) {
     console.error("Firestore Write Error:", error);
-    return res.status(500).send("Internal Server Error: " + error.message);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to save telemetry",
+      error: error.message
+    });
   }
 });
 
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.send('SoberWatch Telemetry API is live and waiting for hardware data!');
+app.post('/testTelemetry', async (req, res) => {
+  if (!db) {
+    return res.status(503).json({
+      status: "error",
+      message: "Firebase is not connected"
+    });
+  }
+
+  const uid = req.body.uid || "test-user";
+  const testData = {
+    alcoholBac: 0.04,
+    heartRateBpm: 78,
+    spo2Percent: 98,
+    tempCelsius: 36.7,
+    ecgStatus: "Stable",
+    sensorRaw: 1200,
+    sensorResponse: 20.0,
+    status: "CAUTION",
+    deviceId: "SOBERWATCH-TEST",
+    timestamp: Date.now(),
+    source: "test"
+  };
+
+  try {
+    // YAHINDUWE: .document() -> .doc()
+    const userRef = db.collection("users").doc(uid);
+    const readingRef = await userRef.collection("readings").add(testData);
+    await userRef.set({
+      lastReading: testData,
+      lastReadingId: readingRef.id,
+      updatedAt: Date.now()
+    }, { merge: true });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Test telemetry saved",
+      readingId: readingRef.id,
+      data: testData
+    });
+  } catch (error) {
+    console.error("Test telemetry error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message
+    });
+  }
+});
+
+app.use((req, res) => {
+  res.status(404).json({
+    status: "error",
+    message: "Endpoint not found",
+    path: req.path
+  });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`SoberWatch server running on port ${PORT}`);
+});
