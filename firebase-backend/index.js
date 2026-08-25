@@ -1,10 +1,10 @@
 const express = require("express");
 const admin = require("firebase-admin");
-const cors = require("cors"); // <-- Iki ni cyo cyongeweho kugira ngo App ibashe kuvugana na server!
+const cors = require("cors");
 const app = express();
 
 app.use(express.json());
-app.use(cors()); // Ibi birema browser/App gukora requests!
+app.use(cors());
 
 // ============================================================
 // FIREBASE INITIALIZATION
