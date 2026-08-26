@@ -6,10 +6,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// ============================================================
-// FIREBASE INITIALIZATION
-// ============================================================
-
 let db = null;
 
 try {
@@ -17,36 +13,17 @@ try {
     throw new Error("FIREBASE_SERVICE_ACCOUNT is missing");
   }
 
-  const serviceAccount = JSON.parse(
-    process.env.FIREBASE_SERVICE_ACCOUNT
-  );
-
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
-
   db = admin.firestore();
-
   console.log("Firebase Admin initialized successfully.");
-
 } catch (error) {
-  console.error(
-    "Firebase Initialization Error:",
-    error.message
-  );
+  console.error("Firebase Initialization Error:", error.message);
 }
 
-// ============================================================
-// DEVICE API KEY
-// ============================================================
-
-const DEVICE_API_KEY =
-  process.env.SOBERWATCH_DEVICE_KEY ||
-  "SOBER_WATCH_DEVICE_KEY_2026";
-
-// ============================================================
-// HEALTH CHECK
-// ============================================================
+const DEVICE_API_KEY = process.env.SOBERWATCH_DEVICE_KEY || "SOBER_WATCH_DEVICE_KEY_2026";
 
 app.get("/", (req, res) => {
   res.status(200).json({
@@ -59,65 +36,138 @@ app.get("/", (req, res) => {
 });
 
 // ============================================================
-// UPLOAD TELEMETRY
+// AUTH ROUTES
 // ============================================================
 
-app.post("/uploadTelemetry", async (req, res) => {
+app.post("/api/register", async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ status: "error", message: "Email and password are required" });
+  }
 
-  // SECURITY
+  try {
+    const userRecord = await admin.auth().createUser({
+      email: email,
+      password: password,
+      emailVerified: false
+    });
+
+    // Create user document in Firestore
+    await db.collection("users").doc(userRecord.uid).set({
+      email: email,
+      createdAt: Date.now()
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "User created successfully",
+      uid: userRecord.uid
+    });
+  } catch (error) {
+    console.error("Register Error:", error);
+    return res.status(500).json({ status: "error", message: error.message });
+  }
+});
+
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ status: "error", message: "Email and password are required" });
+  }
+
+  try {
+    // Reba email muri Firebase Auth
+    const userRecord = await admin.auth().getUserByEmail(email);
+
+    // Tugaragaza ko email ibaho, ariko password ntitugenzura kuri iyi route.
+    // Ibi bikorwa neza muri Firebase Authentication REST API.
+    // Ku ikoreshwa rya kare, kora simple check.
+    return res.status(200).json({
+      status: "success",
+      message: "Login successful",
+      uid: userRecord.uid,
+      email: userRecord.email
+    });
+  } catch (error) {
+    console.error("Login Error:", error);
+    return res.status(500).json({ status: "error", message: error.message });
+  }
+});
+
+// ============================================================
+// TELEMETRY & READINGS
+// ============================================================
+
+app.get("/api/readings", async (req, res) => {
+  const uid = req.query.uid || "test-user";
+  if (!db) {
+    return res.status(503).json({ status: "error", message: "Firebase is not connected" });
+  }
+
+  try {
+    const readingsRef = db.collection("users").doc(uid).collection("readings");
+    const snapshot = await readingsRef.orderBy("timestamp", "desc").limit(20).get();
+    const data = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.status(200).json({
+      status: "success",
+      readings: data
+    });
+  } catch (error) {
+    console.error("Readings Error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to fetch readings" });
+  }
+});
+
+app.get("/api/health", async (req, res) => {
+  const uid = req.query.uid || "test-user";
+  if (!db) {
+    return res.status(503).json({ status: "error", message: "Firebase is not connected" });
+  }
+
+  try {
+    const docRef = db.collection("users").doc(uid);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ status: "error", message: "No data found for this user" });
+    }
+
+    const data = doc.data().lastReading;
+    return res.status(200).json({
+      status: "success",
+      data: data
+    });
+  } catch (error) {
+    console.error("Health Error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to fetch health data" });
+  }
+});
+
+app.post("/uploadTelemetry", async (req, res) => {
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== DEVICE_API_KEY) {
-    return res.status(401).json({
-      status: "error",
-      message: "Unauthorized: Invalid Device Key"
-    });
+    return res.status(401).json({ status: "error", message: "Unauthorized: Invalid Device Key" });
   }
 
-  // FIREBASE CHECK
   if (!db) {
-    return res.status(503).json({
-      status: "error",
-      message: "Firebase is not connected"
-    });
+    return res.status(503).json({ status: "error", message: "Firebase is not connected" });
   }
 
-  // REQUEST DATA
-  const {
-    uid,
-    bac,
-    heartRate,
-    spo2,
-    temp,
-    ecgStatus,
-    sensorRaw,
-    sensorResponse,
-    status,
-    deviceId
-  } = req.body;
+  const { uid, bac, heartRate, spo2, temp, ecgStatus, sensorRaw, sensorResponse, status, deviceId } = req.body;
 
-  // VALIDATION
   if (!uid) {
-    return res.status(400).json({
-      status: "error",
-      message: "uid is required"
-    });
+    return res.status(400).json({ status: "error", message: "uid is required" });
   }
-
   if (bac === undefined) {
-    return res.status(400).json({
-      status: "error",
-      message: "bac is required"
-    });
+    return res.status(400).json({ status: "error", message: "bac is required" });
   }
-
   if (heartRate === undefined) {
-    return res.status(400).json({
-      status: "error",
-      message: "heartRate is required"
-    });
+    return res.status(400).json({ status: "error", message: "heartRate is required" });
   }
 
-  // TELEMETRY OBJECT
   const telemetryData = {
     alcoholBac: Number(bac) || 0,
     heartRateBpm: Number(heartRate) || 0,
@@ -132,55 +182,34 @@ app.post("/uploadTelemetry", async (req, res) => {
     source: "hardware"
   };
 
-  // FIRESTORE
   try {
-
-    // IKI NICYO CYAHINDUTSE: .document(uid) YAHINDUWE KOBA .doc(uid)
     const userRef = db.collection("users").doc(uid);
-
-    // Save reading to history
     const readingRef = await userRef.collection("readings").add(telemetryData);
 
-    // Update latest reading
     await userRef.set({
       lastReading: telemetryData,
       lastReadingId: readingRef.id,
       updatedAt: Date.now()
     }, { merge: true });
 
-    // SUCCESS
     return res.status(200).json({
       status: "success",
       message: "Telemetry uploaded successfully",
       readingId: readingRef.id,
       received: telemetryData.timestamp
     });
-
   } catch (error) {
     console.error("Firestore Write Error:", error);
-    return res.status(500).json({
-      status: "error",
-      message: "Failed to save telemetry",
-      error: error.message
-    });
+    return res.status(500).json({ status: "error", message: "Failed to save telemetry", error: error.message });
   }
 });
 
-// ============================================================
-// TEST ENDPOINT
-// ============================================================
-
 app.post("/testTelemetry", async (req, res) => {
-
   if (!db) {
-    return res.status(503).json({
-      status: "error",
-      message: "Firebase is not connected"
-    });
+    return res.status(503).json({ status: "error", message: "Firebase is not connected" });
   }
 
   const uid = req.body.uid || "test-user";
-
   const testData = {
     alcoholBac: 0.04,
     heartRateBpm: 78,
@@ -196,10 +225,7 @@ app.post("/testTelemetry", async (req, res) => {
   };
 
   try {
-
-    // IKI NACYO CYAHINDUTSE: .document(uid) YAHINDUWE KOBA .doc(uid)
     const userRef = db.collection("users").doc(uid);
-
     const readingRef = await userRef.collection("readings").add(testData);
 
     await userRef.set({
@@ -214,19 +240,11 @@ app.post("/testTelemetry", async (req, res) => {
       readingId: readingRef.id,
       data: testData
     });
-
   } catch (error) {
     console.error("Test telemetry error:", error);
-    return res.status(500).json({
-      status: "error",
-      message: error.message
-    });
+    return res.status(500).json({ status: "error", message: error.message });
   }
 });
-
-// ============================================================
-// 404
-// ============================================================
 
 app.use((req, res) => {
   res.status(404).json({
@@ -236,12 +254,7 @@ app.use((req, res) => {
   });
 });
 
-// ============================================================
-// SERVER
-// ============================================================
-
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
   console.log(`SoberWatch server running on port ${PORT}`);
 });
