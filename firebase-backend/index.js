@@ -6,6 +6,9 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// ============================================================
+// FIREBASE INITIALIZATION
+// ============================================================
 let db = null;
 
 try {
@@ -23,8 +26,14 @@ try {
   console.error("Firebase Initialization Error:", error.message);
 }
 
+// ============================================================
+// DEVICE API KEY
+// ============================================================
 const DEVICE_API_KEY = process.env.SOBERWATCH_DEVICE_KEY || "SOBER_WATCH_DEVICE_KEY_2026";
 
+// ============================================================
+// HEALTH CHECK
+// ============================================================
 app.get("/", (req, res) => {
   res.status(200).json({
     service: "SoberWatch Telemetry API",
@@ -38,7 +47,6 @@ app.get("/", (req, res) => {
 // ============================================================
 // AUTH ROUTES
 // ============================================================
-
 app.post("/api/register", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -81,7 +89,6 @@ app.post("/api/login", async (req, res) => {
 
     // Tugaragaza ko email ibaho, ariko password ntitugenzura kuri iyi route.
     // Ibi bikorwa neza muri Firebase Authentication REST API.
-    // Ku ikoreshwa rya kare, kora simple check.
     return res.status(200).json({
       status: "success",
       message: "Login successful",
@@ -97,7 +104,6 @@ app.post("/api/login", async (req, res) => {
 // ============================================================
 // TELEMETRY & READINGS
 // ============================================================
-
 app.get("/api/readings", async (req, res) => {
   const uid = req.query.uid || "test-user";
   if (!db) {
@@ -146,6 +152,9 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
+// ============================================================
+// UPLOAD TELEMETRY
+// ============================================================
 app.post("/uploadTelemetry", async (req, res) => {
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== DEVICE_API_KEY) {
@@ -204,6 +213,9 @@ app.post("/uploadTelemetry", async (req, res) => {
   }
 });
 
+// ============================================================
+// TEST ENDPOINT
+// ============================================================
 app.post("/testTelemetry", async (req, res) => {
   if (!db) {
     return res.status(503).json({ status: "error", message: "Firebase is not connected" });
@@ -246,6 +258,9 @@ app.post("/testTelemetry", async (req, res) => {
   }
 });
 
+// ============================================================
+// 404
+// ============================================================
 app.use((req, res) => {
   res.status(404).json({
     status: "error",
@@ -254,6 +269,9 @@ app.use((req, res) => {
   });
 });
 
+// ============================================================
+// SERVER
+// ============================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`SoberWatch server running on port ${PORT}`);
