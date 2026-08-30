@@ -1,4 +1,4 @@
-```javascript
+
 const express = require("express");
 const admin = require("firebase-admin");
 const cors = require("cors");
@@ -2014,4 +2014,4 @@ app.listen(
     );
   }
 );
-```
+
